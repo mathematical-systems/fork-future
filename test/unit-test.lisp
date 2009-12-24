@@ -1,0 +1,82 @@
+(in-package :fork-future-test)
+
+(defsuite unit-test)
+
+(in-suite unit-test)
+
+(deftest 1+1-is-2 ()
+  (is (= 2 (touch (future (+ 1 1)))))
+  (is (= 2 (touch (future (print 'hello) (+ 1 1))))))
+
+(deftest error-test ()
+  (signals error (touch (future (error "error test")))))
+
+(deftest future-test ()
+  (let ((f1 (future (sleep 0.1) (+ 1 1)))
+        (f2 (future (sleep 0.2) (+ 1 1))))
+    (is (= 4 (+ (touch f1) (touch f2))))))
+
+(deftest wait-for-future-test ()
+  (is (= 0 (hash-table-count fork-future::*futures*)))
+  (let ((f (future (sleep 0.1) (+ 1 1))))
+    (is (= 1 (hash-table-count fork-future::*futures*)))
+    (wait-for-future f)
+    (is (= 0 (hash-table-count fork-future::*futures*)))
+    (is (not (eq (fork-future::result-of f) 'fork-future::unbound)))
+    (is (= 2 (touch f)))))
+
+(deftest wait-for-all-futures-test ()
+  (is (= 0 (hash-table-count fork-future::*futures*)))
+  (let ((f1 (future (sleep 0.1) (+ 1 1)))
+        (f2 (future (sleep 0.2) (+ 1 1)))
+        (f3 (future (+ 1 1))))
+    (is (= 3 (hash-table-count fork-future::*futures*)))
+    (wait-for-all-futures)
+    (is (= 0 (hash-table-count fork-future::*futures*)))
+    (is (every (lambda (f) (not (eq (fork-future::result-of f) 'fork-future::unbound)))
+               (list f1 f2 f3)))
+    (is (= 6 (+ (touch f1) (touch f2) (touch f3))))))
+
+(deftest kill-future-test ()
+  (let* ((f (future (+ 1 1)))
+         (pid (fork-future::pid-of f)))
+    (sleep 0.5)
+    (kill-future f)
+    (is (= 0 (hash-table-count fork-future::*futures*)))
+    (is (not (probe-file (format nil fork-future::*future-result-file-template* pid))))
+    (is (< 0 (nix:wait)))))
+
+(deftest kill-future-force-test ()
+  (let* ((f (future (+ 1 1)))
+         (pid (fork-future::pid-of f)))
+    (sleep 0.5)
+    (kill-future f t)
+    (is (= 0 (hash-table-count fork-future::*futures*)))
+    (is (not (probe-file (format nil fork-future::*future-result-file-template* pid))))
+    (is (< 0 (nix:wait)))))
+
+(deftest kill-all-futures-test ()
+  (let* ((f1 (future (+ 1 1)))
+         (f2 (future (sleep 0.5) (+ 1 1)))
+         (f3 (future (sleep 1) (+ 1 1))))
+    (sleep 0.5)
+    (kill-all-futures)
+    (is (= 0 (hash-table-count fork-future::*futures*)))
+    (is (every (lambda (f) (not (probe-file (format nil fork-future::*future-result-file-template*
+                                                    (fork-future::pid-of f)))))
+               (list f1 f2 f3)))
+    (is (< 0 (nix:wait) (nix:wait) (nix:wait)))))
+
+(deftest kill-all-futures-force-test ()
+  (let* ((f1 (future (+ 1 1)))
+         (f2 (future (sleep 0.5) (+ 1 1)))
+         (f3 (future (sleep 1) (+ 1 1))))
+    (sleep 0.5)
+    (kill-all-futures t)
+    (is (= 0 (hash-table-count fork-future::*futures*)))
+    (is (every (lambda (f) (not (probe-file (format nil fork-future::*future-result-file-template*
+                                                    (fork-future::pid-of f)))))
+               (list f1 f2 f3)))
+    (is (< 0 (nix:wait) (nix:wait) (nix:wait)))))
+
+

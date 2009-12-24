@@ -1,0 +1,88 @@
+-*- mode: org -*-
+
+* Description
+
+Fork-future is a posix fork() based future parallel library (forked
+from cl-future)
+
+by Jianshi Huang @ Mathematical Systems Inc. (huang@msi.co.jp)
+
+
+* Purpose
+
+Fork() based parallelism has the merit that it makes mutual exclusion
+unnecessary since each process has its own memory space. The
+copy-on-write semantics of memory management is also ideal for
+concurrency. In other words, the OS will help us manage the resource
+for sharing data and separating the execution context.
+
+There is a similar library by Jeff Palmucci called cl-future
+(http://github.com/jpalmucci/cl-future). fork-future is a fork of
+cl-future and they share same implementation ideas.
+
+The reason to fork it is:
+
+  - simplifying the implementation
+    
+    cl-future has some extra features (like limit the process pool)
+    but it complicates the implementation. And I'm not satisfied with
+    some part of the code.
+
+  - better APIs and documentations
+
+    You can almost guess the meaning just by looking at the function
+    name. Also borrow the API from PLT-scheme's future library, which
+    is 'future' and 'touch'.
+
+  - thorough testing
+
+    Since it will be used in our commercial products, tests are very
+    important. Tests on multiple implementations and stress tests are
+    very important for us.
+
+* Supported implementations/platforms
+
+  |---------------+----------+-----------+-----------+-----------|
+  |               | SBCL     | AllegroCL | Lispworks | ClozureCL |
+  |---------------+----------+-----------+-----------+-----------|
+  | Linux-x86     | Yes      | Yes       | Untested  | Untested  |
+  | Linux-x8664   | Yes      | Yes       | Untested  | Untested  |
+  | Windows 32bit | Untested | Untested  | Untested  | Untested  |
+  | Windows 64bit | Untested | Untested  | Untested  | Untested  |
+  |               |          |           |           |           |
+  |---------------+----------+-----------+-----------+-----------|
+
+
+* Library dependencies
+
+Fork-future depends on latest Osicat and cl-store.
+
+Tests depends on Stefil test framework.
+
+* APIs
+
+The following symbols are exported
+
+  future
+  touch
+  wait-for-future
+  wait-for-any-future
+  wait-for-all-futures
+  kill-future
+  kill-all-futures
+  *before-fork-hooks*
+  *after-fork-hooks*
+  *future-result-file-template*
+
+** Major APIs
+
+- future : Macro
+
+  (future &body body) is used to create a future object that evaluates
+  the body.
+
+- touch : function
+
+  (touch future) is to obtain the evaluation result of the future, it
+  will block if the future is not finished yet.
+
