@@ -14,4 +14,5 @@
                          (future (+ 1 1)))))
          (is (= 100 (hash-table-count fork-future::*futures*)))
          (is (= 200 (reduce '+ futures :key 'touch)))
-         (is (= 0 (hash-table-count fork-future::*futures*)))))))
+         (is (= 0 (hash-table-count fork-future::*futures*)))
+         (is (> 0 (fork-future::waitpid 0)))))))

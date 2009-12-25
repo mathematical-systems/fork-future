@@ -58,7 +58,7 @@
 
 (defun wait-for-any-future (&optional error-p (warn-p t))
   (multiple-value-bind (maybe-pid status)
-      (nix:waitpid 0)
+      (waitpid 0)
     (cond ((and (> maybe-pid 0) (gethash maybe-pid *futures*))
 	   (read-result (gethash maybe-pid *futures*) status))
 	  ((< maybe-pid 0)
@@ -77,7 +77,7 @@
 (defmethod kill-future ((future future) &optional force) 
   (let* ((pid (pid-of future))
          (file (format nil *future-result-file-template* pid)))
-    (nix:kill pid (if force nix:sigkill nix:sigterm))
+    (kill pid (if force 9 15))
     (when (probe-file file)
       (delete-file (probe-file file)))
     (remhash pid *futures*)))
@@ -95,7 +95,7 @@
   ;; before hook
   (mapc #'funcall *before-fork-hooks*)
   ;; eval
-  (let ((pid (nix:fork)))
+  (let ((pid (fork)))
     (cond ((> pid 0)
            ;; parent process context
            (setf (gethash pid *futures*)
@@ -112,7 +112,7 @@
                   (*terminal-io* tw)
                   (*debug-io* tw)
                   (*query-io* tw)) 
-             (let* ((output-pathname (format nil *future-result-file-template* (nix:getpid))))
+             (let* ((output-pathname (format nil *future-result-file-template* (getpid))))
                (handler-case 
                    (progn
                      (mapc #'funcall *after-fork-hooks*)
@@ -121,13 +121,13 @@
                        (close tw)
                        (close in)
                        (close out)
-                       (nix:exit 0)))
+                       (exit 0)))
                  (error (e)
                    (cl-store:store (list (get-output-stream-string out) e) output-pathname)
                    (close tw)
                    (close in)
                    (close out)
-                   (nix:exit 1))))))
+                   (exit 1))))))
           (t
            (error "Fork failed with error code: ~a" pid)))))
 
