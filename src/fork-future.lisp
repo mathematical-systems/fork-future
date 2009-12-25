@@ -1,6 +1,6 @@
 (in-package :fork-future)
 
-(defvar *future-result-file-template* "future-result.~d.tmp~~")
+(defvar *future-result-file-template* "/tmp/future-result.~d.tmp~~")
 
 (defvar *futures* (make-hash-table :test #'eql))
 
