@@ -170,6 +170,8 @@ Return the result when finished."
                           (kill-future value force)
                           (return-from only-once))
                       *running-futures*)))
+  (loop for pid = (waitpid 0)
+        until (< pid 0))
   (clrhash *running-futures*))
 
 
