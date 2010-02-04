@@ -104,10 +104,10 @@ The followings are public APIs:
   A common practice is to write the following code:
 
   (with-new-environment ()
-    (initialize-environment)
     ...body)
 
-  in new paralleled tasks.
+  in new paralleled tasks. with-new-environment will insert
+  initialize-environment before body.
 
 
 ** Misc
