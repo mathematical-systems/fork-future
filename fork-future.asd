@@ -6,7 +6,7 @@
   :description "Fork-future is a posix fork() based future parallel library"
   :author "Jianshi Huang @ Mathematical Systems Inc. (huang@msi.co.jp)"
   :version "0.2.20091225"
-  :depends-on (cl-store cffi)
+  :depends-on (cl-store cffi cl-containers)
   :components 
   ((:module src
             :components
@@ -16,8 +16,7 @@
             :perform
             (asdf:load-op :after (op c)
                           (when (find-package 'swank)
-                            (load (merge-pathnames "src/handle-swank.lisp" *fork-future-library-path*)))))))
-
-
-
+                            (load (merge-pathnames "src/handle-swank.lisp" *fork-future-library-path*)))
+                          ;; 
+                          (pushnew :fork-future *features*)))))
 

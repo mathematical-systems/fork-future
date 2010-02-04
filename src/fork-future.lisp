@@ -2,18 +2,24 @@
 
 (defvar *future-result-file-template* "/tmp/future-result.~d.tmp~~")
 
-(defvar *futures* (make-hash-table :test #'eql))
+(defvar *fork-future-max-processes* 4)
+
+(defparameter *running-futures* (make-hash-table))
+(defparameter *pending-futures* (make-instance 'cl-containers:basic-queue))
 
 (defvar *after-fork-hooks* nil)
 (defvar *before-fork-hooks* nil)
 
 (defclass future ()
   ((pid :initarg :pid
-        :reader pid-of
-        :initform (error "Must provide PID for future"))
+        :accessor pid-of
+        :initform nil)                  ; nil means not started yet
    (code :reader code-of
          :initarg :code
          :initform (error "Must provide code for future"))
+   (lambda :reader lambda-of
+           :initarg :lambda
+           :initform (error "Must provide lambda for future"))
    (result :reader result-of :initform 'unbound)
    (exit-status :reader exit-status-of :initform 'unknown)))
 
@@ -26,110 +32,154 @@
       (format stream "PID: ~A, CODE: ~A, EXIT-STATUS: ~A, RESULT: ~A"
 	      pid code exit-status result))))
 
-(defmethod initialize-instance :after ((f future) &key &allow-other-keys)
-  (with-slots (pid) f 
-    (assert (and (integerp pid) (> pid 0)))
-    (assert (not (gethash pid *futures*)))
-    (setf (gethash pid *futures*) f)))
+(defun initialize-environment (&key kill-current-futures-p force-p)
+  (when kill-current-futures-p
+    (kill-all-futures force-p))
+  (setf *running-futures* (make-hash-table))
+  (setf *pending-futures* (make-instance 'cl-containers:basic-queue)))
+
+(defmacro with-new-environment (() &body body)
+  `(let (*running-futures* *pending-futures*
+         (*future-result-file-template* *future-result-file-template*)
+         (*fork-future-max-processes* *fork-future-max-processes*)
+         (*after-fork-hooks* *after-fork-hooks*)
+         (*before-fork-hooks* *before-fork-hooks*))
+     (initialize-environment)
+     (locally
+         ,@body)))
+
+(defun maybe-start-next-available-future ()
+  "When there's pending futures left, and the process pool is not
+full, start the next one pending future.
+
+Return the future started or nil for process pool is full."
+  (when (and (not (cl-containers:empty-p *pending-futures*))
+             (<= (hash-table-count *running-futures*) *fork-future-max-processes*))
+    (let ((next-future (cl-containers:dequeue *pending-futures*)))
+      (assert (null (pid-of next-future)))
+      ;; before hook
+      (mapc #'funcall *before-fork-hooks*)
+      (let ((pid (fork)))
+        (cond ((> pid 0)
+               ;; parent process context
+               (setf (pid-of next-future) pid)
+               (setf (gethash pid *running-futures*) next-future))
+              ((zerop pid)
+               ;; child process context
+               (let* ((in (make-string-input-stream ""))
+                      (out (make-string-output-stream))
+                      (tw (make-two-way-stream in out))
+                      (*standard-input* in)
+                      (*standard-output* out)
+                      (*error-output* out)
+                      (*trace-output* out)
+                      (*terminal-io* tw)
+                      (*debug-io* tw)
+                      (*query-io* tw)) 
+                 (let* ((output-pathname (format nil *future-result-file-template* (getpid))))
+                   (handler-case 
+                       (progn
+                         (mapc #'funcall *after-fork-hooks*)
+                         (let ((result (funcall (lambda-of next-future))))
+                           (cl-store:store (list (get-output-stream-string out) result) output-pathname) 
+                           (close tw)
+                           (close in)
+                           (close out)
+                           (exit 0)))
+                     (error (e)
+                       (cl-store:store (list (get-output-stream-string out) e) output-pathname)
+                       (close tw)
+                       (close in)
+                       (close out)
+                       (exit 1))))))
+              (t
+               (error "Fork failed with error code: ~a" pid))))
+      next-future)))
 
 (defmethod read-result ((future future) status-code)
+  "Read result from the serialization file of the future after it process finishes and cleanup.
+
+Return the result when finished."
   (check-type status-code integer)
   (with-slots (pid code result exit-status) future
     (setf exit-status status-code)
     (let* ((path (format nil *future-result-file-template* pid)))
-      (destructuring-bind (output stored-result)
-	  (cl-store:restore path)
-	(when (and output (> (length output) 0))
-          (format t "~&Child of PID ~a says ~a.~%" pid output))
-	(setf result stored-result)
-	(delete-file (probe-file path))
-	(remhash pid *futures*)))
+      (when (probe-file path)
+        (destructuring-bind (output stored-result)
+            (cl-store:restore path)
+          (when (and output (> (length output) 0))
+            (format t "~&Child of PID ~a says ~a.~%" pid output))
+          (setf result stored-result)
+          (delete-file (probe-file path)))))
     (unless (zerop exit-status)
       (error "Future terminated with error ~a" result))
-    future))
+    result))
 
 (defmethod wait-for-future ((future future))
   (if (not (eq (result-of future) 'unbound))
       future
       (loop for f = (wait-for-any-future)
-            until (or (eq f future) (null f))
+            until (eq f future)
             finally
          (return (or f (error "Future seems to be already finished but the states are not updated."))))))
 
 (defun wait-for-any-future (&optional error-p (warn-p t))
   (multiple-value-bind (maybe-pid status)
       (waitpid 0)
-    (cond ((and (> maybe-pid 0) (gethash maybe-pid *futures*))
-	   (read-result (gethash maybe-pid *futures*) status))
-	  ((< maybe-pid 0)
-	   (when error-p
-             (error "No more child process.")))
-          ((= maybe-pid 0)
-           (error "Child exit status shouldn't be 0."))
-          (t
-           (when warn-p
-             (warn "A child process of PID ~a has just been reaped but it's not among the futures." maybe-pid))))))
+    (prog1
+        (cond ((> maybe-pid 0)
+               (let ((future (gethash maybe-pid *running-futures*)))
+                 (when future
+                   (unwind-protect 
+                        (read-result future status) 
+                     (remhash maybe-pid *running-futures*))
+                   future)))
+              ((< maybe-pid 0)
+               (when error-p
+                 (error "No more child process.")))
+              ((= maybe-pid 0)
+               (error "Child exit status shouldn't be 0."))
+              (t
+               (when warn-p
+                 (warn "A child process of PID ~a has just been reaped but it's not among the futures." maybe-pid))))
+      (loop while (maybe-start-next-available-future)))))
 
 (defun wait-for-all-futures ()
-  (loop while (> (hash-table-count *futures*) 0)
+  (loop while (or (not (cl-containers:empty-p *pending-futures*))
+                  (> (hash-table-count *running-futures*) 0))
         do (wait-for-any-future)))
 
 (defmethod kill-future ((future future) &optional force) 
   (let* ((pid (pid-of future))
          (file (format nil *future-result-file-template* pid)))
-    (kill pid (if force 9 15))
-    (when (probe-file file)
-      (delete-file (probe-file file)))
-    (remhash pid *futures*)))
+    (if pid
+        (progn
+          (kill pid (if force 9 15))
+          (when (probe-file file)
+            (delete-file (probe-file file)))
+          (remhash pid *running-futures*))
+        (progn
+          (cl-containers:delete-item *pending-futures* future)))))
 
 (defun kill-all-futures (&optional force)
-  (maphash #'(lambda (key value)
-               (declare (ignore key))
-	       (kill-future value force))
-	   *futures*)
-  (clrhash *futures*))
+  (cl-containers:empty! *pending-futures*)
+  (loop while (> (hash-table-count *running-futures*) 0)
+        do (block only-once
+             (maphash #'(lambda (key value)
+                          (declare (ignore key))
+                          (kill-future value force)
+                          (return-from only-once))
+                      *running-futures*)))
+  (clrhash *running-futures*))
 
 
 (defun eval-future (fn code)
   (check-type fn function)
-  ;; before hook
-  (mapc #'funcall *before-fork-hooks*)
-  ;; eval
-  (let ((pid (fork)))
-    (cond ((> pid 0)
-           ;; parent process context
-           (setf (gethash pid *futures*)
-                 (make-instance 'future :pid pid :code code)))
-          ((zerop pid)
-           ;; child process context
-           (let* ((in (make-string-input-stream ""))
-                  (out (make-string-output-stream))
-                  (tw (make-two-way-stream in out))
-                  (*standard-input* in)
-                  (*standard-output* out)
-                  (*error-output* out)
-                  (*trace-output* out)
-                  (*terminal-io* tw)
-                  (*debug-io* tw)
-                  (*query-io* tw)) 
-             (let* ((output-pathname (format nil *future-result-file-template* (getpid))))
-               (handler-case 
-                   (progn
-                     (mapc #'funcall *after-fork-hooks*)
-                     (let ((result (funcall fn)))
-                       (cl-store:store (list (get-output-stream-string out) result) output-pathname) 
-                       (close tw)
-                       (close in)
-                       (close out)
-                       (exit 0)))
-                 (error (e)
-                   (cl-store:store (list (get-output-stream-string out) e) output-pathname)
-                   (close tw)
-                   (close in)
-                   (close out)
-                   (exit 1))))))
-          (t
-           (error "Fork failed with error code: ~a" pid)))))
+  (let ((future (make-instance 'future :code code :lambda fn)))
+    ;; eval
+    (cl-containers:enqueue *pending-futures* future)
+    (loop while (maybe-start-next-available-future))
+    future))
 
 (defmacro future (&body body)
   "Evaluate expr in parallel using a forked child process. Returns a

@@ -24,10 +24,6 @@ cl-future and they share same implementation ideas.
 The reason to fork it is:
 
   - simplifying the implementation
-    
-    cl-future has some extra features (like limit the process pool)
-    but it complicates the implementation. And I'm not satisfied with
-    some part of the code.
 
   - better APIs and documentations
 
@@ -54,13 +50,14 @@ The reason to fork it is:
 
 * Library dependencies
 
-Fork-future depends on latest Osicat and cl-store.
+Fork-future depends on cl-store, cffi and cl-containers. In the future
+releases, I may remove the dependency of cl-containers.
 
 Tests depends on Stefil test framework.
 
 * APIs
 
-The following symbols are exported
+The followings are public APIs:
 
   future
   touch
@@ -69,9 +66,13 @@ The following symbols are exported
   wait-for-all-futures
   kill-future
   kill-all-futures
+  initialize-environment
+  with-new-environment
   *before-fork-hooks*
   *after-fork-hooks*
   *future-result-file-template*
+  *fork-future-max-processes*
+
 
 ** Major APIs
 
@@ -84,4 +85,32 @@ The following symbols are exported
 
   (touch future) is to obtain the evaluation result of the future, it
   will block if the future is not finished yet.
+
+- initialize-environment : Function
+
+  (initialize-environment &key kill-current-futures-p force-p) will
+  clean up the environment which is essential for the precondition of
+  later futures to run properly.
+
+  It is strongly suggested to call initialize-environment before
+  starting a paralleled task.
+
+- with-new-environment : Macro
+
+  (with-new-environment () &body body) will create new environments
+  and process pools that does not interfere current running and
+  pending futures.
+
+  A common practice is to write the following code:
+
+  (with-new-environment ()
+    (initialize-environment)
+    ...body)
+
+  in new paralleled tasks.
+
+
+** Misc
+
+:fork-future will be pushed to *features* after loading.
 

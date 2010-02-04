@@ -9,5 +9,7 @@
            #:kill-all-futures
            #:*before-fork-hooks*
            #:*after-fork-hooks*
-           #:*future-result-file-template*))
+           #:*future-result-file-template*
+           #:initialize-environment
+           #:with-new-environment))
 

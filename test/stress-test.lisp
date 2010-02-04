@@ -1,18 +1,18 @@
 (in-package :fork-future-test)
 
-(defsuite stress-test)
+(in-suite root-suite)
 
-(in-suite stress-test)
+(defsuite* stress-test)
 
 (deftest 100p-100times ()
   (loop repeat 100
         do
      (progn
-       (is (= 0 (hash-table-count fork-future::*futures*)))
+       (assert-no-futures) 
        (let ((futures (loop repeat 100
                             collect
                          (future (+ 1 1)))))
-         (is (= 100 (hash-table-count fork-future::*futures*)))
+         (is (= 100 (futures-count)))
          (is (= 200 (reduce '+ futures :key 'touch)))
-         (is (= 0 (hash-table-count fork-future::*futures*)))
-         (is (> 0 (fork-future::waitpid 0)))))))
+         (is (> 0 (fork-future::waitpid 0))))
+       (assert-no-futures))))
