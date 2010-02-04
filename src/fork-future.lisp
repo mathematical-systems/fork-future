@@ -101,16 +101,18 @@ Return the future started or nil for process pool is full."
 
 Return the result when finished."
   (check-type status-code integer)
-  (with-slots (pid code result exit-status) future
+  (with-slots (pid result exit-status) future
+    (assert pid)
     (setf exit-status status-code)
     (let* ((path (format nil *future-result-file-template* pid)))
-      (when (probe-file path)
-        (destructuring-bind (output stored-result)
-            (cl-store:restore path)
-          (when (and output (> (length output) 0))
-            (format t "~&Child of PID ~a says ~a.~%" pid output))
-          (setf result stored-result)
-          (delete-file (probe-file path)))))
+      (if (not (probe-file path))
+          (setf result (values))        ; nil
+          (destructuring-bind (output stored-result)
+              (cl-store:restore path)
+            (when (and output (> (length output) 0))
+              (format t "~&Child of PID ~a says ~a.~%" pid output))
+            (setf result stored-result)
+            (delete-file (probe-file path)))))
     (unless (zerop exit-status)
       (error "Future terminated with error ~a" result))
     result))

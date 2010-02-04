@@ -10,6 +10,7 @@
            #:*before-fork-hooks*
            #:*after-fork-hooks*
            #:*future-result-file-template*
+           #:*fork-future-max-processes*
            #:initialize-environment
            #:with-new-environment))
 
