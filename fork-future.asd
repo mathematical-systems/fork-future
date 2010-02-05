@@ -5,7 +5,7 @@
 (asdf:defsystem fork-future
   :description "Fork-future is a posix fork() based future parallel library"
   :author "Jianshi Huang @ Mathematical Systems Inc. (huang@msi.co.jp)"
-  :version "0.2.20091225"
+  :version "0.3.20100210"
   :depends-on (cl-store cffi cl-containers)
   :components 
   ((:module src
