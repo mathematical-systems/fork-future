@@ -54,7 +54,7 @@ full, start the next one pending future.
 
 Return the future started or nil for process pool is full."
   (when (and (not (cl-containers:empty-p *pending-futures*))
-             (<= (hash-table-count *running-futures*) *fork-future-max-processes*))
+             (< (hash-table-count *running-futures*) *fork-future-max-processes*))
     (let ((next-future (cl-containers:dequeue *pending-futures*)))
       (assert (null (pid-of next-future)))
       ;; before hook
