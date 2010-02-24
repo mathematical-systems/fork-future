@@ -112,15 +112,20 @@ Return the result when finished."
             (when (and output (> (length output) 0))
               (format t "~&Child of PID ~a says ~a.~%" pid output))
             (setf result stored-result)
-            (delete-file (probe-file path)))))
-    (unless (zerop exit-status)
-      (error "Future terminated with error ~a" result))
+            (delete-file (probe-file path))))) 
     result))
+
+(defun check-exit-status-or-raise-error (future)
+  (with-slots (exit-status pid result) future
+    (unless (zerop exit-status)
+      (error "Future of PID ~a terminated with error: ~a"
+             pid result))))
 
 (defmethod wait-for-future ((future future))
   (if (not (eq (result-of future) 'unbound))
       future
       (loop for f = (wait-for-any-future)
+            while f
             until (eq f future)
             finally
          (return (or f (error "Future seems to be already finished but the states are not updated."))))))
@@ -134,7 +139,7 @@ Return the result when finished."
                  (when future
                    (unwind-protect 
                         (read-result future status) 
-                     (remhash maybe-pid *running-futures*))
+                     (remhash maybe-pid *running-futures*)) 
                    future)))
               ((< maybe-pid 0)
                (when error-p
@@ -195,8 +200,8 @@ side-effects made in <expr> will be visible from the calling process."
   "walk the list structure 'future', replacing any futures with their
 evaluated values. Blocks if a future is still running."
   (with-slots (result) future
-    (loop while (eq result 'unbound)
-          do (wait-for-future future))
-    (return-from touch result)))
+    (wait-for-future future)
+    (check-exit-status-or-raise-error future)
+    (result-of future)))
 
 
