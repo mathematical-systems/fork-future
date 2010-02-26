@@ -55,7 +55,7 @@
     (kill-future f)
     (assert-no-futures)
     (is (not (probe-file (format nil fork-future::*future-result-file-template* pid))))
-    (is (< 0 (fork-future::wait)))
+    (is (> 0 (fork-future::wait)))
     (is (> 0 (fork-future::waitpid 0)))))
 
 (deftest kill-future-force-test ()
@@ -68,7 +68,7 @@
     (kill-future f t)
     (assert-no-futures)
     (is (not (probe-file (format nil fork-future::*future-result-file-template* pid))))
-    (is (< 0 (fork-future::wait)))
+    (is (> 0 (fork-future::wait)))
     (is (> 0 (fork-future::waitpid 0)))))
 
 (deftest kill-all-futures-test ()
@@ -83,7 +83,7 @@
     (is (every (lambda (f) (not (probe-file (format nil fork-future::*future-result-file-template*
                                                     (fork-future::pid-of f)))))
                (list f1 f2 f3)))
-    (is (and (< 0 (fork-future::wait)) (< 0 (fork-future::wait)) (< 0 (fork-future::wait))))
+    (is (> 0 (fork-future::wait)))
     (is (> 0 (fork-future::waitpid 0)))))
 
 (deftest kill-all-futures-force-test ()
@@ -98,7 +98,7 @@
     (is (every (lambda (f) (not (probe-file (format nil fork-future::*future-result-file-template*
                                                     (fork-future::pid-of f)))))
                (list f1 f2 f3)))
-    (is (and (< 0 (fork-future::wait)) (< 0 (fork-future::wait)) (< 0 (fork-future::wait))))
+    (is (> 0 (fork-future::wait)))
     (is (> 0 (fork-future::waitpid 0)))))
 
 

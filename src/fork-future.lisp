@@ -164,7 +164,8 @@ Return the result when finished."
           (kill pid (if force 9 15))
           (when (probe-file file)
             (delete-file (probe-file file)))
-          (remhash pid *running-futures*))
+          (remhash pid *running-futures*)
+          (waitpid 0))
         (progn
           (cl-containers:delete-item *pending-futures* future)))))
 
