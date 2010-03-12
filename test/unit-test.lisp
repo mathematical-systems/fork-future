@@ -102,3 +102,20 @@
     (is (> 0 (fork-future::waitpid 0)))))
 
 
+(deftest recursive-future-test ()
+  (assert-no-futures)
+  (let ((f1
+         (future
+           (+
+            (let ((f1 (future (+ 1 1)))
+                  (f2 (future (+ 2 2))))
+              (is (= 2 (futures-count))) 
+              (is (= 6 (+ (touch f1) (touch f2))))
+              (+ (touch f1) (touch f2)))
+            (let ((f1 (future (+ 1 1)))
+                  (f2 (future (+ 2 2))))
+              (is (= 2 (futures-count))) 
+              (is (= 6 (+ (touch f1) (touch f2))))
+              (+ (touch f1) (touch f2)))))))
+    (is (= 1 (futures-count)))
+    (is (= 12 (touch f1)))))

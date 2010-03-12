@@ -195,7 +195,10 @@ Return the result when finished."
   "Evaluate expr in parallel using a forked child process. Returns a
 'future' object whose value can be retrieved using touch. No
 side-effects made in <expr> will be visible from the calling process."
-  `(eval-future #'(lambda () ,@body) '(progn ,@body)))
+  `(eval-future #'(lambda ()
+                    (with-new-environment ()
+                      ,@body))
+                '(progn ,@body)))
 
 (defmethod touch ((future future))
   "walk the list structure 'future', replacing any futures with their
