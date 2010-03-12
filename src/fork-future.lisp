@@ -5,7 +5,7 @@
 (defvar *fork-future-max-processes* 4)
 
 (defparameter *running-futures* (make-hash-table))
-(defparameter *pending-futures* (make-instance 'cl-containers:basic-queue))
+(defparameter *pending-futures* (make-queue))
 
 (defvar *after-fork-hooks* nil)
 (defvar *before-fork-hooks* nil)
@@ -36,7 +36,7 @@
   (when kill-current-futures-p
     (kill-all-futures force-p))
   (setf *running-futures* (make-hash-table))
-  (setf *pending-futures* (make-instance 'cl-containers:basic-queue)))
+  (setf *pending-futures* (make-queue)))
 
 (defmacro with-new-environment (() &body body)
   `(let (*running-futures* *pending-futures*
@@ -53,9 +53,9 @@
 full, start the next one pending future.
 
 Return the future started or nil for process pool is full."
-  (when (and (not (cl-containers:empty-p *pending-futures*))
+  (when (and (not (queue-empty-p *pending-futures*))
              (< (hash-table-count *running-futures*) *fork-future-max-processes*))
-    (let ((next-future (cl-containers:dequeue *pending-futures*)))
+    (let ((next-future (dequeue *pending-futures*)))
       (assert (null (pid-of next-future)))
       ;; before hook
       (mapc #'funcall *before-fork-hooks*)
@@ -152,7 +152,7 @@ Return the result when finished."
       (loop while (maybe-start-next-available-future)))))
 
 (defun wait-for-all-futures ()
-  (loop while (or (not (cl-containers:empty-p *pending-futures*))
+  (loop while (or (not (queue-empty-p *pending-futures*))
                   (> (hash-table-count *running-futures*) 0))
         do (wait-for-any-future)))
 
@@ -167,10 +167,10 @@ Return the result when finished."
           (remhash pid *running-futures*)
           (waitpid 0))
         (progn
-          (cl-containers:delete-item *pending-futures* future)))))
+          (queue-delete-item *pending-futures* future)))))
 
 (defun kill-all-futures (&optional force)
-  (cl-containers:empty! *pending-futures*)
+  (queue-empty! *pending-futures*)
   (loop while (> (hash-table-count *running-futures*) 0)
         do (block only-once
              (maphash #'(lambda (key value)
@@ -187,7 +187,7 @@ Return the result when finished."
   (check-type fn function)
   (let ((future (make-instance 'future :code code :lambda fn)))
     ;; eval
-    (cl-containers:enqueue *pending-futures* future)
+    (enqueue future *pending-futures*)
     (loop while (maybe-start-next-available-future))
     future))
 

@@ -4,7 +4,7 @@
   (hash-table-count fork-future::*running-futures*))
 
 (defun pending-futures-count ()
-  (length (cl-containers:collect-items fork-future::*pending-futures*)))
+  (fork-future::queue-length fork-future::*pending-futures*))
 
 (defun futures-count ()
   (+ (running-futures-count) (pending-futures-count)))
