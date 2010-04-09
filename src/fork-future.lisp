@@ -42,8 +42,8 @@
   `(let (*running-futures* *pending-futures*
          (*future-result-file-template* *future-result-file-template*)
          (*fork-future-max-processes* *fork-future-max-processes*)
-         (*after-fork-hooks* *after-fork-hooks*)
-         (*before-fork-hooks* *before-fork-hooks*))
+         *after-fork-hooks*
+         *before-fork-hooks*)
      (initialize-environment)
      (locally
          ,@body)))
