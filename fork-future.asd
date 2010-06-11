@@ -11,6 +11,7 @@
   ((:module src
             :components
             ((:file "package")
+             (:file "simple-queue" :depends-on ("package"))
              (:file "posix-wrapper" :depends-on ("package"))
              (:file "fork-future" :depends-on ("posix-wrapper")))
             :perform
